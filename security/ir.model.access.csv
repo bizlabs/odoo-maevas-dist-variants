@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_dist_variant_values_dist_variant_values,dist_variant_values.dist_variant_values,model_dist_variant_values_dist_variant_values,base.group_user,1,1,1,1

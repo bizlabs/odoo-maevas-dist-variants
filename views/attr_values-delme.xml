@@ -1,0 +1,13 @@
+<odoo>
+    <record id="view_product_attribute_form_inherit" model="ir.ui.view">
+        <field name="name">product.attribute.form.inherit</field>
+        <field name="model">product.attribute</field>
+        <field name="inherit_id" ref="product.product_attribute_view_form"/>
+        <field name="arch" type="xml">
+            <!-- Locate the notebook where attribute values are shown -->
+            <xpath expr="//page[@name='attribute_values']/field[@name='value_ids']/tree/field[@name='name']" position="after">
+                <field name="archive"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
