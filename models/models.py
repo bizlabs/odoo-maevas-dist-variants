@@ -2,6 +2,9 @@
 
 from odoo import models, fields, api
 from odoo.exceptions import UserError
+import logging
+_logger = logging.getLogger(__name__)
+
 
 class ProductTemplateAttributeValue(models.Model):
     '''override create, write, unlink to auto run syncing to products on any change'''
@@ -55,6 +58,7 @@ class ProductAttributeValue(models.Model):
     _inherit = "product.attribute.value"    
 
     def create_variant(self, records):
+        _logger.info(" create_variant called")
         product_templates = self.env['product.template'].search([])
         for product in product_templates:
             for attribute_line in product.attribute_line_ids:
@@ -63,6 +67,7 @@ class ProductAttributeValue(models.Model):
                       attribute_line.write({'value_ids' : [(4,record.id)]})
 
     def update_variant(self):
+        _logger.info(" update_variant called")
         # Fetch all product templates
         product_template_attribute_values = self.env['product.template.attribute.value'].search([
             ('product_attribute_value_id.id', '=', self.id)])
@@ -84,6 +89,8 @@ class ProductAttributeValue(models.Model):
         #     tval.price_extra = gval.default_extra_price
 
     def create(self, vals):
+        _logger.info(" create override established")
+
         records = super(ProductAttributeValue, self).create(vals)
         val = vals[0]
         if "attribute_id" in val.keys():
@@ -93,12 +100,16 @@ class ProductAttributeValue(models.Model):
         return records
 
     def write(self, vals):
+        _logger.info(" write override established")
+        attr = self.attribute_id
         result = super(ProductAttributeValue, self).write(vals)
-        if sync_values(self):
+        _logger.info("sync_values boolean = " + str(sync_values(attr)))
+        if sync_values(attr):
             self.update_variant()
         return result
 
     def unlink(self):
+        _logger.info(" unlink override established")
         if sync_values(self):
             for record in self:
                 product_template_attribute_values = self.env['product.template.attribute.value'].search([
@@ -114,6 +125,9 @@ def sync_values(attrval):
     """return True if desired to sync attribute values to all products
     currently, this is done for all variants of creation type 'never' except 
     for the variant named 'size'"""
+    _logger.info(" sync_values: create_variant = " + attrval.create_variant)
+    _logger.info(" sync_values: name = " + attrval.name)
+
     if attrval.create_variant == 'no_variant' and \
         attrval.name != 'size':
         return True
