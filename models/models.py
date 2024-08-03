@@ -2,8 +2,8 @@
 
 from odoo import models, fields, api
 from odoo.exceptions import UserError
-import logging
-_logger = logging.getLogger(__name__)
+# import logging
+# _logger = logging.getLogger(__name__)
 
 
 class ProductTemplateAttributeValue(models.Model):
@@ -12,7 +12,8 @@ class ProductTemplateAttributeValue(models.Model):
 
     def write(self,vals):
         ### check and allow if coming from the global sync method
-        if self:
+        
+        if "price_extra" in vals.keys() or "name" in vals.keys():
             if not "allow_sync" in vals.keys():
                 if not self.attribute_id.name == 'size':
                     msg = "You cannot change individual product attribute values (when variant creation mode is 'Never') \n"
@@ -46,9 +47,12 @@ class ProductTemplateAttributeLine(models.Model):
         if hasattr(self, 'attribute_id'):
             attr = self.env['product.attribute'].search([('id','=',self['attribute_id'].id)])
         if sync_values(attr):
-            ### delete template values so they can be overridden?
-            # vals['product_template_value_ids'] = [(5,)]
-            vals['value_ids'] = [(6, 0, attr.value_ids.ids)]
+            ### if called from deleting a value from the global attr line, allow
+            # the delete (keep value_ids), otherwise reset value_ids so no delete
+            if "allow_sync" in vals.keys():
+                del vals['allow_sync']
+            else:
+                vals['value_ids'] = [(6, 0, attr.value_ids.ids)]
 
         result = super(ProductTemplateAttributeLine, self).write(vals)
         return result
@@ -57,8 +61,7 @@ class ProductAttributeValue(models.Model):
     '''override create, write, unlink to auto run syncing to products on any change'''
     _inherit = "product.attribute.value"    
 
-    def create_variant(self, records):
-        _logger.info(" create_variant called")
+    def x_create_variant(self, records):
         product_templates = self.env['product.template'].search([])
         for product in product_templates:
             for attribute_line in product.attribute_line_ids:
@@ -66,8 +69,7 @@ class ProductAttributeValue(models.Model):
                     if record.attribute_id.id == attribute_line.attribute_id.id:
                       attribute_line.write({'value_ids' : [(4,record.id)]})
 
-    def update_variant(self):
-        _logger.info(" update_variant called")
+    def x_update_variant(self):
         # Fetch all product templates
         product_template_attribute_values = self.env['product.template.attribute.value'].search([
             ('product_attribute_value_id.id', '=', self.id)])
@@ -79,45 +81,36 @@ class ProductAttributeValue(models.Model):
                     'name':         record.name,
                 })
 
-        # tval = product.product_template_value_ids.filtered(lambda v: v.product_attribute_value_id.id == gval.id) # find attr value in product template
-        # gval = self
-        # # gval = tval.product_attribute_value_id # attr value in global attributes
-        # if gval.archive:
-        #     #remove from tval
-            
-        # else:
-        #     tval.price_extra = gval.default_extra_price
-
     def create(self, vals):
-        _logger.info(" create override established")
-
         records = super(ProductAttributeValue, self).create(vals)
-        val = vals[0]
-        if "attribute_id" in val.keys():
-            attr = self.env['product.attribute'].search([('id','=',val['attribute_id'])])
-        if sync_values(self):
-            self.create_variant(records)
+        for record in records:
+            attr = record.attribute_id
+            if sync_values(attr):
+                self.x_create_variant(record)
         return records
 
     def write(self, vals):
-        _logger.info(" write override established")
         attr = self.attribute_id
         result = super(ProductAttributeValue, self).write(vals)
-        _logger.info("sync_values boolean = " + str(sync_values(attr)))
         if sync_values(attr):
-            self.update_variant()
+            self.x_update_variant()
         return result
 
     def unlink(self):
-        _logger.info(" unlink override established")
-        if sync_values(self):
+        if sync_values(self.attribute_id):
             for record in self:
                 product_template_attribute_values = self.env['product.template.attribute.value'].search([
                     ('product_attribute_value_id.id', '=', record.id)])
                 
                 for tval in product_template_attribute_values:
                     tline = tval.attribute_line_id
-                    tline.write({'value_ids': [(3,tval.product_attribute_value_id.id)]})
+                    tval_id = tval.product_attribute_value_id.id
+                    # tline.value_ids = [(3,tval_id)]
+                    tline.write({
+                        'value_ids':    [(3,tval_id)],
+                        'allow_sync':   True
+                        })
+                pass
         result = super(ProductAttributeValue, self).unlink()
         return result
 
@@ -125,8 +118,6 @@ def sync_values(attrval):
     """return True if desired to sync attribute values to all products
     currently, this is done for all variants of creation type 'never' except 
     for the variant named 'size'"""
-    _logger.info(" sync_values: create_variant = " + attrval.create_variant)
-    _logger.info(" sync_values: name = " + attrval.name)
 
     if attrval.create_variant == 'no_variant' and \
         attrval.name != 'size':
